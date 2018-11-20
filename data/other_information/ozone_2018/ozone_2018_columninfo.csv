@@ -1,0 +1,7 @@
+COLUMN_ID,COLUMN_NAME,UNIT,DESCRIPTION,DATA_TYPE,DATA_LENGTH,PRIMARY_KEY
+1,SITE_ID,,"Site identification code",CHAR,6,1
+2,DATE_TIME,,"Date and time sample collection began, Local Standard Time; mm/dd/yyyy hh:mm:ss.",DATE,19,2
+3,OZONE,ppb,"Ozone concentration; ppb.",NUMBER,"8,4",
+4,OZONE_F,,"Data quality code for OZONE",CHAR,3,
+5,QA_CODE,,"Quality assurance level of the record. (see QAPP for definition of quality assurance levels)",CHAR,2,
+6,UPDATE_DATE,,"Date and time of last record update",DATE,19,

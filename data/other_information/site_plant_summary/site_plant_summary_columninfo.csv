@@ -1,0 +1,8 @@
+COLUMN_ID,COLUMN_NAME,UNIT,DESCRIPTION,DATA_TYPE,DATA_LENGTH,PRIMARY_KEY
+1,SITE_ID,,"Site identification code",CHAR,6,1
+2,PLANT_ID,,"Plant identification code",NUMBER,"11,0",2
+3,PERCENT_COVERAGE,%,"Percentage of total leaf coverage due to the plant species at the site",NUMBER,"8,2",
+4,MAXIMUM_LAI,,"Maximum leaf area index at the site",NUMBER,"8,2",
+5,WINTER_LAI,,"Winter conditions leaf area index at the site",NUMBER,"8,2",
+6,RESERVED,,"Reserved for future use",NUMBER,"8,2",
+7,UPDATE_DATE,,"Date and time of last record update",DATE,19,
