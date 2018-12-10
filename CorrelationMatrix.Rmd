@@ -1,0 +1,42 @@
+---
+title: "CorrelationMatrix"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Correlation Matrix of different pollutant
+
+```{r}
+# read data
+pollution_month <- read.csv("Pollution.csv")
+head(pollution_month)
+```
+
+
+
+```{r fig.width=10, fig.height=10,message=FALSE, warning=FALSE}
+# draw the correlation matrix between each variables
+library(extracat)
+library(GGally)
+library(dplyr)
+ggpairs(pollution_month,
+        column = c(4:16),
+        title = "Correlation Matrix of Different Pollutant") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+s
