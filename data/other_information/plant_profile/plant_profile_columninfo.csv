@@ -1,5 +1,0 @@
-COLUMN_ID,COLUMN_NAME,UNIT,DESCRIPTION,DATA_TYPE,DATA_LENGTH,PRIMARY_KEY
-1,PROFILE_TYPE,%,"Used by MLM - plant profile index used to group the plant profile level and percent leaf values.",NUMBER,"6,0",1
-2,PROFILE_LEVEL,"the canopy","Used by MLM - counter for levels in the canopy.",NUMBER,"4,0",2
-3,PERCENT_LEAF,"the canopy","Used by MLM - fraction of total leaves for each level in the canopy.",NUMBER,"12,4",
-4,UPDATE_DATE,,"Date and time of last record update.",DATE,19,

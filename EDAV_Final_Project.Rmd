@@ -1,0 +1,790 @@
+---
+title: "Research on Pollution over the US"
+author: "Xinyuan Cao, Zhejin Dong, Shimeng Feng, Weiyang Gu"
+date: "12/10/2018"
+output: 
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+- Link to our GitHub repository: [https://github.com/youki-cao/EDAV-Final-PJ](https://github.com/youki-cao/EDAV-Final-PJ)
+
+## Introduction
+
+
+
+In the nearest decade, smart wearable market has become one the fastest growing market in the world. Numerous well-designed full featured wearable devices are brought to the market, and all these products are based on the idea that customers can keep track of their own health status. Similarly, there is an increasing trend on the number of operating fitness facilities as well as the number of people who go for an exercise. All these trends imply that people nowadays are willing to spend more time and money on their personal health. However, the societal attention on the environment issues, especially air pollution, which is another very important aspect closely related to people’s health, seems to be overwhelmed by those fashion of consumer products. Therefore, we decide to conduct an analytical study on air quality in the United States. We aim to use exploratory data analysis to study if there is any trends on air quality changes and whether there exists any regional effects on air quality. 
+
+
+## Description of data
+
+The raw data we use for the project is obtained from the official website of the United States Environmental Protection Agency ([EPA](https://java.epa.gov/castnet/reportPage.do)) . We can access the data through Clean Air Status and Trends Network (CASTNET). CASTNET has filter pack data that are reported for the time interval that the filter was exposed. We choose the weekly ambient concentrations of SO2 and HNO3 gases, and SO4, NO3, NH4 and base cation concentrations for particles as measured by open-face filter packs from 2008 to 2018 for all available states in the United States. 
+The data we use have following dimensions:
+
+- Sulfate (SO4) concentration from Teflon filter; ug/m^3.
+- Nitrate (NO3) concentration from Teflon filter; ug/m^3.
+- Ammonium (NH4) concentration from Teflon filter; ug/m^3.
+- Calcium (Ca) concentration from Teflon filter; ug/m^3.
+- Magnesium (Mg) concentration from Teflon filter; ug/m^3.
+- Sodium (Na) concentration from Teflon filter; ug/m^3.
+- Potassium (K) concentration from Teflon filter; ug/m^3.
+- Chloride (Cl) concentration from Teflon filter; ug/m^3.
+- Sulfate (SO4) concentration from Nylon filter; ug/m^3.
+- Nitric acid (NO3) concentration from Nylon filter; ug/m^3.
+- Sulfur dioxide (SO2) concentration from Whatman filter; ug/m^3.
+- Nitrate (NO3) concentration from Whatman filter; ug/m^3.
+- Total sulfur dioxide (SO2) concentration calculated from [wso2]+0.667*nso4]; ug/m^3.
+- Total nitrate (NO3) concentration calculated from [tno3]+0.9841*[nhno3]; ug/m^3.
+
+
+Site ID data (from [EPA](https://java.epa.gov/castnet/epa_jsp/prepackageddata.jsp)) is used to convert the SITE_ID code into STATE and corresponding OBS_SITE. 
+
+In order to gain a more comprehensive understanding of the key source behind generating sulfur related oxides, we leverage the Energy Consumption Estimates by Source dataset in the year of 2016 (from [EIA](https://www.eia.gov/state/seds/data.php?incfile=/state/seds/sep_sum/html/rank_use_source.html&sid=US)). There are 4 main sources as the key combustion materials within the United States, Coal, Natural Gas, Petroleum, and Retail Electricity Sales. Within each source, states are ranked by source consumption in unit of Trillion Btu. 
+
+We also use the data of state asthma patient population count in the year of 2015 from [Centers for Disease Control](https://www.cdc.gov/asthma/most_recent_data_states.htm).
+
+
+
+## Analysis of data quality
+
+We have performed the following steps to pre-treat the data for further analysis.
+
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics('Dataset/data_process_flow.png')
+```
+
+Here are the reasons behind each processing step:
+
+### 1. Missing data
+We have first discovered the missing data pattern using the Filter Pack Concentration weekly data.
+
+```{r, fig.align='center', fig.height=8, message=FALSE, warning=FALSE}
+library(extracat)
+library(readr)
+raw_data <- data.frame(read_csv("Dataset/Filter Pack Concentration.csv"))
+visna(raw_data ,sort = "b")
+```
+
+The visna graph shows the following main patterns: 
+
+- *WNO3* and *COMMENT_CODE* columns are the two variables with the highest missing data volume, and the combination of these two variables is also the highest missing pattern. All data from *WNO3* is missing.
+
+- For all other variables, there is no significant pattern. The reason behind could be the limitation of observation itself, such as humane errors of failing to fill in the observation of a specific pollutant or failed to collect data at an observation site. Moreover, as pollutant is cumulated on a relative long term, performing analysis for air pollution on a weekly basis could introduce significant fluctuation for certain pollutant. Thus, we will combine weekly data into monthly data in order to better observe higher-level patterns.
+
+
+
+After we combine the data by month, we generate a visna graph to show the missing data pattern of the new data. 
+
+```{r, fig.align='center', fig.height=6, message=FALSE, warning=FALSE}
+
+raw_data_month <- data.frame(read_csv("Dataset/Filter Pack Concentration_DATE.csv"))
+visna(raw_data_month, sort = "b")
+```
+
+From the graph above, we can conclude that there are two major missing data patterns within the graph. The first missing pattern is that the data entry only missing *WNO3*. The second missing pattern is the data entry is missing all observation of the pollutant and only consist of basic information such as *TIME*, *STATE*, etc. And a small amount of data is under this pattern. Now we eliminate WNO3 column from our original data as a data pre-treatment. 
+
+In addition, we have discovered that California and Vermont miss more values than others. In order to fulfill the emptied monthly value, we added additional entries and fill in zeros as the placeholders for each pollutant. This might cause certain level of inaccuracy while performing analysis but guaranteed the visualization effects (e.g. d3 animation).
+
+
+
+### 2. Eliminate and combine pollutants
+
+Here we have so many pollutants. From data description, we discover that the total SO2 includes SO2 and SO4 as the main component and the Total NO3 includes TNO3 and NHNO3 as the main component. In addition, through the correlation analysis, we can conclude that TNH4 is highly correlated to TNO3 with a value of 0.678. Thus we will choose TOTAL_SO2 and TOTAL_NO3 as the main gaseous pollutant. For particles, we will consider all the particles (CA, MG, NA and K ) together by following the rough definition of PM2.5 (fine particles with AD less than 2.5 μm).
+
+
+```{r, cache=TRUE, fig.width=10, fig.height=10, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(GGally)
+pollution_data <- read.csv("Dataset/Pollution.csv")
+ggpairs(pollution_data,
+        column = c(4:16),
+        title = "Correlation Matrix of Different Pollutant") + 
+        theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+
+```
+
+
+
+## Main analysis (Exploratory Data Analysis)
+
+
+### Time series trend across states
+
+Here we make a bar chart animation on the three pollutant variables over the past 18 years over states.
+
+```{r, echo=FALSE}
+htmltools::includeHTML("bar_chart_animation.htm")
+```
+
+
+From animation we can find:
+
+- The SO2 concentration decreases apparently over the past 10 years.
+
+- NO3 and particle pollution have stable distribution during the past 10 years.
+
+- Stringent emission regulation can make to positive difference.
+
+- Natural factors explain to the pollution fluctuation to some degree.
+
+
+### Time Series on chosen states for each polluatnt
+
+From the Pattern Discovery animation, we could see that for SO2, most states experienced a significant drop in the concentration level. We decided to choose the top state at 2008 and the top state at 2018, and draw their time series to see their specific pattern during the 10-year-span. 
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+pollutionData <- read.csv("Dataset/main_pollutant.csv")
+PAData <- subset(pollutionData, State == 'PA')
+year.month.day.str <- format(as.Date(PAData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(PAData, aes(x = year.month.day, y = SO2)) + geom_line() +
+  labs(x = "Year", y = "SO2") + 
+  ggtitle("SO2 in Pennsylvania Time Series")
+```
+
+Pennsylvania had the highest average SO2 concentration of 6.51 in 2008, but the number dropped to 0.63 in 2018. From the time series we have above, there is a clear decreasing trend with some seasonal fluctuation. 
+
+
+
+```{r}
+library(ggplot2)
+MEData <- subset(pollutionData, State == 'ME')
+year.month.day.str <- format(as.Date(MEData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(MEData, aes(x = year.month.day, y = SO2)) + geom_line() +
+  labs(x = "Year", y = "Concentration") + 
+  ggtitle("SO2 in Maine Time Series")
+```
+
+In 2008, Maine was not even on the top 10 state list, but it unexpectedly became the state with the highest level of SO2 concentration in 2018. From the time series of Maine, we could see that it actually had a quite stable SO2 concentration throughout these years, with the only special occasion of a jump up value in 2018. Notice that the absolute value of concentration in Maine is not very high, it indicates a nation-wide large decrease in SO2 concentration level. 
+
+As for NO3, the ranking and the concentration level for each state are relatively stable compared to that of SO2, so we decided to choose only Illinois, the state with the highest NO3 concentration in 2018, to study the trend. 
+
+```{r}
+ILData <- subset(pollutionData, State == 'IL')
+year.month.day.str <- format(as.Date(ILData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(ILData, aes(x = year.month.day, y = SO2)) + geom_line() +
+  labs(x = "Year", y = "Concentration") + 
+  ggtitle("NO3 in Illinois Time Series")
+```
+
+
+We could see from the graph above that there is a decreasing trend for NO3 concentration in Illinois, and the concentration value becomes more stable. 
+
+For particle pollutants, Florida stands out to be the state having the highest concentration throughout these years, so we choose Florida to be studied.
+
+```{r}
+FLData <- subset(pollutionData, State == 'FL')
+year.month.day.str <- format(as.Date(FLData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(FLData, aes(x = year.month.day, y = Particles)) + geom_line() +
+  labs(x = "Year", y = "Concentration") + 
+  ggtitle("Particle pollutants in Florida Time Series")
+```
+
+Very different from the other graphs we drew before, this time series of particle pollutants for Florida shows a more frequent fluctuation on concentration values. Also, there is no clear increasing or decreasing trends. 
+
+
+
+### Seasonal patterns on concentration level
+
+From the above time series graph, we could see fluctuations in concentration levels, we expect there might be a possible seasonal pattern of fluctuations. Therefore, we choose 3 states with the highest average concentration level in each of the 3 pollutants and draw their time series graph by year. We expect to see similar trends in the graph that the concentration levels increase and decrease at around the same time during each year.
+
+
+#### Top 3 SO2 States Time Series by Year
+```{r message=FALSE}
+# SO2 in OH
+OHData <- subset(pollutionData, State == 'OH')
+month.day.str <- format(as.Date(OHData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+OHData$Year <- as.factor(OHData$Year)
+ggplot(OHData, aes(x = month.day, y = SO2)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "SO2") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("SO2 in Ohio Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# SO2 in PA
+PAData <- subset(pollutionData, State == 'PA')
+month.day.str <- format(as.Date(PAData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+PAData$Year <- as.factor(PAData$Year)
+ggplot(PAData, aes(x = month.day, y = SO2)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "SO2") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("SO2 in Pennsylvania Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# SO2 in MD
+MDData <- subset(pollutionData, State == 'MD')
+month.day.str <- format(as.Date(MDData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+MDData$Year <- as.factor(MDData$Year)
+ggplot(MDData, aes(x = month.day, y = SO2)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "SO2") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("SO2 in Maryland Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+For SO2, the graphs for each year have a similar shape, and there is a distinct drop in concentration level for every one of the states. There is indeed a seasonal pattern for SO2 concentration. SO2 concentration tends to get lower in summer and raise up in winter. 
+
+#### Top 3 NO3 States Time Series by Year
+
+```{r message=FALSE}
+# NO3 in IL
+ILData <- subset(pollutionData, State == 'IL')
+month.day.str <- format(as.Date(ILData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+ILData$Year <- as.factor(ILData$Year)
+ggplot(ILData, aes(x = month.day, y = NO3)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "NO3") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("NO3 in Illinois Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# NO3 in NJ
+NJData <- subset(pollutionData, State == 'NJ')
+month.day.str <- format(as.Date(NJData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+NJData$Year <- as.factor(NJData$Year)
+ggplot(NJData, aes(x = month.day, y = NO3)) +
+  geom_line(aes(color=Year)) +
+  labs(x = "Month", y = "NO3") +
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("NO3 in New Jersey Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# NO3 in IN
+INData <- subset(pollutionData, State == 'IN')
+month.day.str <- format(as.Date(INData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+INData$Year <- as.factor(INData$Year)
+ggplot(INData, aes(x = month.day, y = NO3)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "NO3") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("NO3 in Indiana Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+For NO3, clear patterns could be seen in Illinois and Indiana. The pattern for New Jersey is not as clear as the other two because there are some particular data points such as April 2008 and November 2012 seems not quite fit in the pattern, but overall we still believe there exists seasonal pattern for NO3. Similar to the patterns we see for SO2, NO2 concentration tends to be lower in summer and increases in winter. 
+
+
+#### Top 3 Particles Pollutants States Time Series by Year
+
+```{r message=FALSE}
+# Particle in FL
+FLData <- subset(pollutionData, State == 'FL')
+month.day.str <- format(as.Date(FLData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+FLData$Year <- as.factor(FLData$Year)
+ggplot(FLData, aes(x = month.day, y = Particles)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "Particles") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("Particles in Florida Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Particle in TX
+TXData <- subset(pollutionData, State == 'TX')
+month.day.str <- format(as.Date(TXData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+TXData$Year <- as.factor(TXData$Year)
+ggplot(TXData, aes(x = month.day, y = Particles)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "Particles") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("Particles in Texas Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Particle in TN
+TNData <- subset(pollutionData, State == 'TN')
+month.day.str <- format(as.Date(TNData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+TNData$Year <- as.factor(TNData$Year)
+ggplot(TNData, aes(x = month.day, y = Particles)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "Particles") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("Particles in Tennessee Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+For particle pollutants, the patterns are very different from those of SO2 and NO3. The concentration tends to fluctuate around a certain value throughout the year. Florida's graph shows a quite messy pattern whereas Texas and Tennessee have a comparatively clearer pattern with highs and lows at the around the same time of the year. However, the seasonal patterns are much weaker and not so obvious compared to those for the other two pollutants. 
+
+### Seasonal Patterns for different polluatnts
+
+After seeing seasonal patterns for each pollutant in particular states, we want ot see if pollutants actually share the same seasonal pattern with each other. Notice that Illinois has quite high concentration on all three pollutants, so we draw a time series of all three polluatnts in Illinois on the same graph. 
+```{r message=FALSE}
+library(dplyr)
+library(tidyr)
+ILData <- subset(pollutionData, State == 'IL')
+tidyIL <- ILData %>% gather(key = "Pollutants", value = "Concentration", -X, -State, -Time, -Year, -Month)
+year.month.day.str <- format(as.Date(tidyIL$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+tidyIL$Year <- as.factor(tidyIL$Year)
+ggplot(tidyIL, aes(x = year.month.day, y = Concentration)) + 
+  geom_line(aes(color = Pollutants)) + 
+  labs(x = "Time", y = "Concentration") + 
+  ggtitle("All pollutants in Illinois Time Series") 
+```
+
+
+From the graph above, we could see that NO3 and SO2 do share a very similar seasonal pattern that with highs around the winter time and lows around summer time throughout the year. However, particle pollutants behave differently than with highs around the summer time and lows around the winter time.
+
+Several reasons could cause the above seasonality. For example, the usage of coal and petroleum is generally higher in the winter and lower in the summer. Thus, the variation in the consumption of combustion materials can directly relate to the variation of SO2 and NO3 concentration. In general, all three types of pollutant show a general correlation with temperature, relative humidity, precipitation, wind circulation, etc. 
+
+It has been believed that the majority of the time, particulate matter shows a lower value at summer and a higher value around winter time because the cold temperature at winter time will directly result in condensation of particles, which leads to a higher detection rate. However, our results show that for various particles the behavior is different. With the Shiny application, we have discovered that Mg and K show significant higher concentration around summer but lower concentration. NA behaves opposite for IL but shows higher value around spring time for AL. This irregularity is also confirmed from the Harvard research paper *Atmospheric Environment* (Amos P.K. Tai, 2010). Within the paper, the author has indicated that the correlation with temperature, relative humidity, wind direction, precipitation differ for individual Particulate Matter and it's the corresponding region. Thus, at this point, the best way to further discover a trend is through regression on considering various variables. This could be an interesting future discussion.
+
+
+### Spatial distribution
+
+To see the spatial distribution overstates, we draw the linked micromaps over three pollutants, and show only the plot of SO2. The maps can be used for further stufy of geographic clustering trend.
+
+```{r}
+# preprocess Particles, SO2, NO3, calculate mean over all past years
+Particles_mean <- aggregate(Particles~State, pollutionData, mean)
+SO2_mean <- aggregate(SO2~State, pollutionData, mean)
+NO3_mean <- aggregate(NO3~State, pollutionData, mean)
+colnames(Particles_mean) <- c("state", "Particles")
+colnames(SO2_mean) <- c("state", "SO2")
+colnames(NO3_mean) <- c("state", "NO3")
+pollutant_mean <- merge(Particles_mean, SO2_mean)
+pollutant_mean <- merge(pollutant_mean, NO3_mean)
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, fig.height=7, fig.width=6, fig.align='center'}
+library(tools)
+library(micromap)
+data("USstates")
+statePolys <- create_map_table(USstates, IDcolumn = "ST")
+
+lmplot(stat.data = pollutant_mean,
+       map.data = statePolys,
+       panel.types = c('dot_legend', 'labels', 'dot', 'map'),
+       panel.data = list(NA, 'state','SO2', NA),
+       ord.by = 'SO2', 
+       rev.ord = TRUE,
+       grouping = 5,
+       colors = brewer.pal(5, "Set1"),
+       median.row = TRUE,
+       map.link = c('state', 'ID'),
+       # how to merge the two data frames:
+       map.color2 = "white",
+       # attributes of the panels:
+       panel.att = list(
+         list(1, point.type=20,
+              point.border=TRUE),
+          list(2, header = "States",
+               panel.width = 0.2,
+               panel.header.face = "bold",
+               panel.header.size = 1.2,
+               graph.grid.color = "grey99",
+               align = "left"),
+          list(3, header = "SO2 Pollution Amount", 
+               panel.header.face = "bold",
+               panel.header.size = 1.2,
+               xaxis.title = 'ug/m^3'),
+          list(4, header = 'Geographical Location',
+               panel.header.face = "bold",
+               panel.header.size = 1.2)
+          ))
+
+```
+
+
+
+### Industrial and natural influence
+
+#### SO2 pollutant
+
+Based on the research of the Department of Environment and Energy has discovered, we know that about 99% of the sulfur dioxide or its related family in air comes from human sources. For example, the main source of sulfur dioxide in the air could comes from generation of electricity from coal, oil or gas that contains sulfur. From the graph we can see that the OH, PA, MD, NJ, IN are the top 5 states that generate SO2 related pollutant. Thus, we predict those 5 states should have the corresponding highest Fuel/fossil related consumption. We will consider coal and petroleum as the two key sources that contribute to the sulfur oxides.
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+library(plotly)
+library(extracat)
+library(ggpubr)
+library(corrplot)
+library(choroplethr)
+coal <- data.frame(
+  read_csv('Dataset/Coal_Consumption_2016.csv'))
+
+state_choropleth(coal, title="Petroleum consumption by state for 2016", legend="Petroleum Consumption by state")+ scale_fill_brewer(palette=8)
+
+Petroleum<- data.frame(
+  read_csv('Dataset/Petroleum_Consumption_2016.csv'))
+
+state_choropleth(coal, title="Petroleum consumption by state for 2016", legend="Petroleum Consumption by state")+
+  scale_fill_brewer(palette=8)
+
+```
+
+The above maps show similar trend across states. TX, CA, LA, NY, PA, IL, LA, and FL are the states with top consumptions of coal and petroleum. This is consistent with our hypothesis that sulfur oxides concentration has a positive correlation with coal and petroleum consumption. 
+
+According to EPA, the main source of SO2 is the burning of fossil fuels by power plants and other industrial facilities. Referring to the coal consumption distribution, PA and OH have high coal consumption among American cities. 
+
+High SO2 in MD can be ascribed to the Crane and Wagner coal-fired power plants in Baltimore city. These two plants did not install modern emission controls for SO2. This acute problem in Baltimore boasted the highest SO2 emission in MD.  
+
+High SO2 emission in OH is because of urbanized areas such as Cleveland and Cincinnati and along Lake Erie and the Ohio River, where the predominant sources are electric generating units. In the report Ohio’s 2010 Revised Sulfur Dioxide National Ambient Air Quality Standard Recommended Designations and Nonattainment Boundaries, 
+
+
+Geographical or topographical barriers can significantly affect the transport of SO2 within its air shed. Emissions travelling from Ohio transport to the East Coast, driving up the amount of air pollution in states such as Maryland, Delaware, and New Jersey—also among the states with the highest emissions-related mortality rates. 
+
+What efforts were devoted to relieve air pollution effectively in these three states?
+
+Interestingly, we found that these three states not only neighbor each other, but also share the same pattern of SO2 concentration. From year 2012, all three states have effective and apparent decreasing SO2 concentration. We question the reason behind such phenomenon. After some research, we found that EPA regulations and state environment policy contribute to the improvement of air quality. MD state applied Clean Cars program and introduced some of the strictest regulations on vehicles in the country in an effort to combat emissions.  EPA approved Air Quality Implementation Plans in Delaware, District of Columbia, Maryland, Pennsylvania, Virginia, and West Virginia. Federal Mercury and Air Toxics (MATS)  required coal and oil-fired plants to install pollution control equipment by April 15, 2015, and this policy explains the apparent SO2 dropping around year 2014. 
+For more information, please refer to the [link](https://www.epa.gov/air-quality-implementation-plans/approved-air-quality-implementation-plans-region-3). 
+
+As mentioned above, geographical and weather factor such as upwind will affect the east coast. Thus, when air pollution in OH was enhanced, the SO4 concentration in east coast cities such as MD decreases as well.  
+
+Reflection about the research:
+
+Stringent emission regulation can make to positive difference to air pollution because coal consumption and manufacture emission are the main reason of SO4.
+
+Beyond that, we need to take weather and geography features into consideration. Basically, wind flow  triggers pollutant transferring so limit the pollution of the upwind source can be effective approach to relieve air pollution of the destination cities. 
+
+
+#### Particles pollutant
+
+Observing the the annually particle concentration fluctuation, we notice that unlike SO2, particles pollution has a predictable distribution, and the top 5 states with highest particle pollution are relatively stable. In the past 10 years, the total content of particles pollution does not decrease apparently. Besides, Florida (FL) and Texas (TA) both have quite high particle pollution, we take FL as example to explore the fluctuation of particles pollution. 
+
+
+**Why FL has high particle pollution?**
+
+Referring to the coal consumption in 2016, we found that FL has a high coal consumption, which can be one of the reasons. Except for that, we guess the high metal concentration in air may due to the ocean in FL. The main metal elements in ocean, MG, K, NA, and CA mean transform to air. The third reason for high particle concentration is temperature. Mental elements belong to PM2.5, and according to Wiki, PM 2.5 increases with temperature increasing. FL and TX locate the south of USA, neighboring the ocean, having high coal consumption, so FL and TX have a very high particle concentration in air. 
+
+**Why particles pollution has stable distribution?**
+
+According to Wiki, human-produced (fossil fuel) pollution is largely responsible for the areas of small aerosols over developed areas such as the eastern United States and Europe, especially in their summer. Besides the human factor, high temperature and geography, such as neighboring the ocean, will also contribute to high metal content in air. The unavoidable natural factor explains the stable distribution. 
+
+
+### Pollution and health
+
+####Asthma
+
+https://www.epa.gov/clean-air-act-overview/air-pollution-current-and-future-challenges
+
+Research has shown that air pollution worse asthma symptoms. Short-term exposures to SO2 can harm the human respiratory system and make breathing difficult. Children, the elderly, and those who suffer from asthma are particularly sensitive to the effects of SO2. Hence we want to see if the distribution of asthma shows a match to our SO2 measurements over the country. As we have discovered that OH, PA, KY, and MD have high SO2 concentration starting 2008. Accordingly, we have seen a similar geographical distribution of a higher number of asthma patients on the map. However, the asthma distribution is also based on many other factors. For example, Oregon has a high asthma patient population but it has not shown any significant pollution trend. Through research, we have discovered that this is based on the age distribution across Oregon. Therefore, even though we can conclude that pollution contributes to the probability of having asthma but we cannot eliminate it as the only reason.
+
+
+```{r message=FALSE, warning=FALSE}
+AsthmaData <- read.csv("Dataset/Asthma.csv")
+library(choroplethr)
+state_choropleth(AsthmaData, num_colors = 1, title = "US Adult Asthma Prevalence in 2015", legend = "% of all adults")
+```
+
+
+#### Cardionology
+
+Scientific research has shown that NO3 and particles have a significant influence on cardiovascular-related disease. Based on the geographic map above we can see that the southeast region, part of the Midwest region and part of the northeast region show the highest heart attack death rate. From our geographic pattern it shows FL, TX, TN has the highest particle concentration, and IL, NJ, IN have the highest NO3 pollution value. However, because there are many other reasons could contribute to cardiovascular diseases, we can roughly conclude that NO3 and particles contribute to cardiovascular diseases but we cannot eliminate other potential reasons cause any heart diseases. 
+
+Link: https://www.thelancet.com/journals/lancet/article/PIIS0140-6736%2816%2900378-0/fulltext#seccestitle70
+
+
+```{r message=FALSE, warning=FALSE}
+Heart<- data.frame(
+  read_csv('Dataset/Heart_Disease_2016.csv'))
+state_choropleth(Heart, title="Heart Disease Date Rate by state for 2016", legend="Heart Disease Death Rate")+ scale_fill_brewer(palette=3)
+```
+
+
+## Executive summary (Presentation-style）
+
+###Summary
+
+The goal of this project is to raise people attention to environment through studying how the air pollution affect humane health and also what are the main reasons cause the pollution. Through the projet, various analysis has been included, such as time series, geographic analysis, etc. The project has leveraged multiple government dataset, such as United States Environmental Protection Agency (EPA), Centers for Disease Control and Prevention (CDC),etc.
+
+
+### Overall Work Flow
+
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics('Dataset/workflow.png')
+```
+
+
+### Trend Discovery
+
+Refer to the animation above.
+
+```{r warning=FALSE}
+library(tidyverse)
+Mosaic_data <- data.frame(read_csv('Dataset/Filter Pack Concentration_FINAL.csv'))
+
+Particles_mean <- aggregate(Particles~State, Mosaic_data, mean)
+SO2_mean <- aggregate(SO2~State, Mosaic_data, mean)
+NO3_mean<- aggregate(NO3~State, Mosaic_data, mean)
+
+Mosaic_new <- merge(Particles_mean,SO2_mean)
+Mosaic_new <- merge (Mosaic_new,NO3_mean)
+Mosaic_Final <- gather(Mosaic_new,key = 'pollutant',value = concentration, -State)
+
+ggplot(data = Mosaic_Final, aes(x = reorder(State, -concentration), y = concentration, fill = pollutant,order = pollutant)) + 
+    geom_bar(stat = "identity") + coord_flip() + 
+    ggtitle("Pollutant distribution by states")
+```
+
+The stack bar chart shows the overall distribution of the main pollutants.
+
+### Data Analysis - Time Series & Spatial Analysis
+
+Time series is used to discover how pollutant distribute among state between 2008-2018.
+
+
+#### SO2 Concentration by state example
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+pollutionData <- read.csv("Dataset/main_pollutant.csv")
+PAData <- subset(pollutionData, State == 'PA')
+year.month.day.str <- format(as.Date(PAData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(PAData, aes(x = year.month.day, y = SO2)) + geom_line() +
+  labs(x = "Year", y = "SO2") + 
+  ggtitle("SO2 in Pennsylvania Time Series")
+```
+
+Pennsylvania had the highest average SO2 concentration of 6.51 in 2008, but the number dropped to 0.63 in 2018. From the time series we have above, there is a clear decreasing trend with some seasonal fluctuation. 
+
+#### NO3 Concentration by state example
+```{r}
+ILData <- subset(pollutionData, State == 'IL')
+year.month.day.str <- format(as.Date(ILData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(ILData, aes(x = year.month.day, y = SO2)) + geom_line() +
+  labs(x = "Year", y = "Concentration") + 
+  ggtitle("NO3 in Illinois Time Series")
+```
+
+
+We could see from the graph above that there is a decreasing trend for NO3 concentration in Illinois, and the concentration value becomes more stable. 
+
+For particle pollutants, Florida stands out to be the state having the highest concentration throughout these years, so we choose Florida to be studied.
+
+
+#### Particles Concentration by state example
+
+```{r}
+FLData <- subset(pollutionData, State == 'FL')
+year.month.day.str <- format(as.Date(FLData$Time), "%y%m%d")
+year.month.day <- as.Date(year.month.day.str, tryFormats = "%y%m%d")
+ggplot(FLData, aes(x = year.month.day, y = Particles)) + geom_line() +
+  labs(x = "Year", y = "Concentration") + 
+  ggtitle("Particle pollutants in Florida Time Series")
+```
+
+Very different from the other graphs we drew before, this time series of particle pollutants for Florida shows a more frequent fluctuation on concentration values. Also, there is no clear increasing or decreasing trends. 
+
+#### Top 3 NO3 States Time Series by Year
+
+```{r message=FALSE}
+# NO3 in IL
+ILData <- subset(pollutionData, State == 'IL')
+month.day.str <- format(as.Date(ILData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+ILData$Year <- as.factor(ILData$Year)
+ggplot(ILData, aes(x = month.day, y = NO3)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "NO3") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("NO3 in Illinois Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+#### Top 3 SO2 States Time Series by Year
+```{r message=FALSE}
+# SO2 in OH
+OHData <- subset(pollutionData, State == 'OH')
+month.day.str <- format(as.Date(OHData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+OHData$Year <- as.factor(OHData$Year)
+ggplot(OHData, aes(x = month.day, y = SO2)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "SO2") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("SO2 in Ohio Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+#### Top 3 Particles Pollutants States Time Series by Year
+
+```{r message=FALSE}
+# Particle in FL
+FLData <- subset(pollutionData, State == 'FL')
+month.day.str <- format(as.Date(FLData$Time), "%m%d")
+month.day <- as.Date(month.day.str, tryFormats = "%m%d")
+FLData$Year <- as.factor(FLData$Year)
+ggplot(FLData, aes(x = month.day, y = Particles)) + 
+  geom_line(aes(color=Year)) + 
+  labs(x = "Month", y = "Particles") + 
+  scale_x_date(date_breaks = "months" , date_labels = "%b") +
+  ggtitle("Particles in Florida Time Series for each year") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+#### Geographical Analysis
+
+Spatial analysis is used to discover spatial clustering trend of the three major pollutants we have eliminated above.
+
+
+```{r}
+# preprocess Particles, SO2, NO3, calculate mean over all past years
+Particles_mean <- aggregate(Particles~State, pollutionData, mean)
+SO2_mean <- aggregate(SO2~State, pollutionData, mean)
+NO3_mean <- aggregate(NO3~State, pollutionData, mean)
+colnames(Particles_mean) <- c("state", "Particles")
+colnames(SO2_mean) <- c("state", "SO2")
+colnames(NO3_mean) <- c("state", "NO3")
+pollutant_mean <- merge(Particles_mean, SO2_mean)
+pollutant_mean <- merge(pollutant_mean, NO3_mean)
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, fig.height=7, fig.width=6, fig.align='center'}
+library(tools)
+library(micromap)
+data("USstates")
+statePolys <- create_map_table(USstates, IDcolumn = "ST")
+
+lmplot(stat.data = pollutant_mean,
+       map.data = statePolys,
+       panel.types = c('dot_legend', 'labels', 'dot', 'map'),
+       panel.data = list(NA, 'state','SO2', NA),
+       ord.by = 'SO2', 
+       rev.ord = TRUE,
+       grouping = 5,
+       colors = brewer.pal(5, "Set1"),
+       median.row = TRUE,
+       map.link = c('state', 'ID'),
+       # how to merge the two data frames:
+       map.color2 = "white",
+       # attributes of the panels:
+       panel.att = list(
+         list(1, point.type=20,
+              point.border=TRUE),
+          list(2, header = "States",
+               panel.width = 0.2,
+               panel.header.face = "bold",
+               panel.header.size = 1.2,
+               graph.grid.color = "grey99",
+               align = "left"),
+          list(3, header = "SO2 Pollution Amount", 
+               panel.header.face = "bold",
+               panel.header.size = 1.2,
+               xaxis.title = 'ug/m^3'),
+          list(4, header = 'Geographical Location',
+               panel.header.face = "bold",
+               panel.header.size = 1.2)
+          ))
+
+```
+
+
+###Research
+
+#### Coal and Petroleum Cosumption
+
+This data is used to determine the cause of how combustion of coal and petroleum affect SO2,NO3, and particles. We have discovered that pollutant are influenced by both industry and nature, which is hard to quantified. The states with high consumption rate is generally consistent with our pollutant distribution above.
+
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+library(plotly)
+library(extracat)
+library(ggpubr)
+library(corrplot)
+library(choroplethr)
+coal <- data.frame(
+  read_csv('Dataset/Coal_Consumption_2016.csv'))
+
+state_choropleth(coal, title="Petroleum consumption by state for 2016", legend="Petroleum Consumption by state")+ scale_fill_brewer(palette=8)
+
+Petroleum<- data.frame(
+  read_csv('Dataset/Petroleum_Consumption_2016.csv'))
+
+state_choropleth(coal, title="Petroleum consumption by state for 2016", legend="Petroleum Consumption by state")+
+  scale_fill_brewer(palette=8)
+
+```
+
+
+#### Disease
+
+Asthma is correlated to SO2 emission rate, cardiovascular diseases are correlated to NO3 and particles. However, both diseases have multiple other reasons behinds. Thus the conclusion cannot be eliminated to just the pollutants.
+
+```{r message=FALSE, warning=FALSE}
+AsthmaData <- read.csv("Dataset/Asthma.csv")
+library(choroplethr)
+state_choropleth(AsthmaData, num_colors = 1, title = "US Adult Asthma Prevalence in 2015", legend = "% of all adults")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+Heart<- data.frame(
+  read_csv('Dataset/Heart_Disease_2016.csv'))
+state_choropleth(Heart, title="Heart Disease Date Rate by state for 2016", legend="Heart Disease Death Rate")+ scale_fill_brewer(palette=3)
+```
+
+
+
+
+
+
+
+
+## Interactive Part
+To see the time series over all states and all years more clearly, we use shiny to plot an interactive graph, click (here)[https://youki-cao.shinyapps.io/shiny/] to explore more : )
+
+
+## Conclusion
+
+- In our project, we try to find the distribution patterns of different air pollutants over the United States, and possible reasons that might contribute to the patterns we find. Also, we try to study if there is any possible correlation between air pollutants and some health problems. 
+
+
+- Both SO2 and NO3 shows a clear seasonal pattern with a high in winter and a low in summer. Particle pollutants, on the other hand, have no noticeable seasonal pattern, but show large 
+
+- Stringent emission regulation can make to positive difference to air pollution because coal consumption and manufacture emission are the main reason of SO2.
+
+- Taking the weather and geography features into consideration can effectively relieve air pollution of the destination cities. 
+
+- NO3 and particle pollution have stable distribution during the past 10 years.
+
+- Metal particles can ascribe to temperature and ocean which partly explains the stable distribution of metal particles. 
+
+
+
+
+
+## Reference
+
+1. https://www.hindawi.com/journals/ijas/2013/264046/
+
+2. http://acmg.seas.harvard.edu/publications/2010/Tai_2010.pdf
+
+3. https://www.eia.gov/state/seds/data.php?incfile=/state/seds/sep_sum/html/rank_use_source.html&sid=US
+
+
+
+
+
+
+
+
+
+
