@@ -1,7 +1,0 @@
-COLUMN_ID,COLUMN_NAME,UNIT,DESCRIPTION,DATA_TYPE,DATA_LENGTH,PRIMARY_KEY
-1,SITE_ID,,"Site identification code",CHAR,6,1
-2,PLANT_ID,,"Plant identification code",NUMBER,"11,0",2
-3,JSTART,,"Julian starting date for the given interval",NUMBER,"11,0",3
-4,JEND,,"Julian ending date for the given interval",NUMBER,"11,0",
-5,PERCENT_LEAF,%,"Percentage of maximum leaf coverage for the time period, plant, and site",NUMBER,"8,2",
-6,UPDATE_DATE,,"Date and time of last record update",DATE,19,

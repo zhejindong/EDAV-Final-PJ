@@ -1,0 +1,75 @@
+---
+title: 'Homework #4'
+author: "Zhejin Dong(zd2221)"
+date: "11/14/2018"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+Anually_data<-read.csv('/Users/zhejindong/Downloads/__public__data__castnet__download__Castnet_4B31B9F8659F5BF4F2868247415B43B4_11_14_2018_093807/Concentration - Annual.csv')
+Season_data<-read.csv("/Users/zhejindong/Downloads/__public__data__castnet__download__Castnet_4B31B9F8659F5BF4F2868247415B43B4_11_14_2018_093807/Concentration - Seasonal.csv")
+Week_data<-read.csv("/Users/zhejindong/Downloads/__public__data__castnet__download__Castnet_4B31B9F8659F5BF4F2868247415B43B4_11_14_2018_093807/Concentration - Weekly.csv")
+```
+
+
+```{r}
+library(tidyverse)
+Anually_data$YEAR<-as.character(Anually_data$YEAR)
+Anually_data$YEAR<-paste0(Anually_data$YEAR,"-01-01")
+Anually_data$YEAR<-as.Date(Anually_data$YEAR)
+data1<-filter(Anually_data,YEAR>='2008-01-01')
+data1$SITE_ID<-factor(data1$SITE_ID,levels=c('CTH110','CAT175','NIC001','WFM105','HWF187','WFM007'),
+                      labels=c('Connecticut Hill','Claryville','Nicks Lake','Whiteface Mountain','Huntington Wildlife Forest','NULL'))
+```
+
+
+```{r}
+ggplot(data1,aes(x=YEAR,y=data1$SO4_CONC,group=data1$SITE_ID,color=SITE_ID)
+       )+geom_line()+scale_x_date(date_labels = "%Y",date_breaks = '1 year'
+                                  )+geom_point()+ggtitle('Decreasing SO4 by Years')+ylab('SO4')
+```
+
+
+The picture above shows that SO4 content in 5 districts in NYC decreases by years from 2009 to 2017. 
+
+
+```{r}
+Week_data$DATE<-substr(Week_data$DATEON, 1, 10)
+Week_data$DATE<-as.Date(Week_data$DATE,'%m/%d/%Y')
+Week_data$Month<-substr(Week_data$DATE,6,7)
+Week_data$YEAR<-factor(Week_data$YEAR)
+```
+```{r fig.width==10}
+data2<-select(Week_data,Month,YEAR,SO4_CONC)
+data2<-filter(data2,SO4_CONC!='NA')
+
+data3<-data2 %>% group_by(Month,YEAR) %>% summarise_at(vars(SO4_CONC),mean)
+
+ggplot(data3,aes(x=Month,y=SO4_CONC,group=1))+geom_line()+facet_grid(~YEAR)+ggtitle('SO4 Content Month Fluctuation')+ylab('SO4 Content')
+```
+
+From the picture above, we can found two changes from 2008 to 2018:
+
+1 The total annually SO4 content is decreasing.
+
+2 The variance of SO4 in a year is decreasing.
+
+
+
+```{r}
+data7<-filter(data2,YEAR %in% c('2008','2012','2017'))
+data6<-data7 %>% group_by(Month,YEAR) %>% summarise_at(vars(SO4_CONC),mean)
+ggplot(data6, aes(Month,SO4_CONC)) + geom_col(fill='darkred')+ xlab("SO4")+facet_wrap(YEAR~.)+xlab('Month')+ggtitle('SO4 Content Month Fluctuation in Three Typical Years')
+```
+
+
+I selected three typical years to display in detail the fluctuation of SO4 in 12 months. I found, before 2012, SO4 content is quite high in from June to July, but this situation weakens by years. 
+
