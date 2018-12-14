@@ -123,7 +123,7 @@ ggpairs(pollution_data,
 Here we make a bar chart animation on the three pollutant variables over the past 18 years over states.
 
 ```{r, echo=FALSE}
-htmltools::includeHTML("bar_chart_animation.htm")
+htmltools::includeHTML("bar chart animation.htm")
 ```
 
 
@@ -523,7 +523,7 @@ knitr::include_graphics('Dataset/workflow.png')
 
 Refer to the animation above.
 
-```{r warning=FALSE}
+```{r warning=FALSE, message=FALSE}
 library(tidyverse)
 Mosaic_data <- data.frame(read_csv('Dataset/Filter Pack Concentration_FINAL.csv'))
 
